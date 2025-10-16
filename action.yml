@@ -1,0 +1,189 @@
+name: Factory Droid Review
+description: Automated Code Review for GitHub Pull Requests.
+author: Factory
+
+inputs:
+  factory-api-key:
+    description: "The API key to run Droid Exec which powers the Review Droid (required)."
+    required: true
+  pr-number:
+    description: "The Pull Request number being reviewed."
+    required: true
+  pr-head-sha:
+    description: "The commit SHA of the Pull Request head branch for correct checkout."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        ref: ${{ inputs.pr-head-sha }}
+        token: ${{ github.token }}
+
+    - name: Install Droid CLI
+      shell: bash
+      run: |
+        curl -fsSL https://app.factory.ai/cli | sh
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        "$HOME/.local/bin/droid" --version
+
+    - name: Perform automated code review
+      shell: bash
+      env:
+        FACTORY_API_KEY: ${{ inputs.factory-api-key }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+
+        cat > prompt.txt << 'EOF'
+        You are an automated code review system. Review the PR diff and identify clear issues that need to be fixed.
+
+        First, use the Web Fetch tool to get the full PR context from: https://github.com/${{ github.repository }}/pull/${{ inputs.pr-number }}
+
+        This will provide you with:
+        - PR title, description, and metadata
+        - Complete diff with line numbers for positioning comments
+        - Changed files with their status
+        - Existing comments and review threads (to avoid duplicates)
+
+        Task: After fetching the PR data, review the code changes and directly submit your findings using the GitHub CLI.
+
+        Focus on these types of issues:
+        - Dead/unreachable code (if (false), while (false), code after return/throw/break)
+        - Broken control flow (missing break in switch, fallthrough bugs)
+        - Async/await mistakes (missing await, .then without return, unhandled promise rejections)
+        - Array/object mutations in React components or reducers
+        - UseEffect dependency array problems (missing deps, incorrect deps)
+        - Incorrect operator usage (== vs ===, && vs ||, = in conditions)
+        - Off-by-one errors in loops or array indexing
+        - Integer overflow/underflow in calculations
+        - Regex catastrophic backtracking vulnerabilities
+        - Missing base cases in recursive functions
+        - Incorrect type coercion that changes behavior
+        - Environment variable access without defaults or validation
+        - Null/undefined dereferences
+        - Resource leaks (unclosed files or connections)
+        - SQL/XSS injection vulnerabilities
+        - Concurrency/race conditions
+        - Missing error handling for critical operations
+
+        Comment format for inline reviews:
+        - Describe the issue clearly: "This async function is missing await"
+        - Explain the impact: "Without await, the promise won't resolve before continuing"
+        - ONLY provide commit suggestions when you are confident about the exact fix
+        - When uncertain, just identify the problem without suggesting code changes
+        - Example WITHOUT suggestion (when fix needs context):
+          "Potential null dereference here. Consider adding a null check, but the exact approach depends on the business logic."
+
+        CRITICAL: GitHub suggestion format requirements:
+        - Single-line suggestions: Use simple ```suggestion block
+        - Multi-line suggestions: MUST include the complete replacement code
+        - The suggestion block replaces EVERYTHING from the start_line to end_line in the comment
+        - Never split multi-line suggestions - include ALL lines that need to be replaced
+
+        - Example single-line suggestion (when fix is certain):
+          ```suggestion
+          const result = await fetchData();
+          ```
+
+        - Example multi-line suggestion (replaces entire block from start to end):
+          ```suggestion
+          if (value != null) {
+            return processValue(value);
+          }
+          return defaultValue;
+          ```
+
+        - Be specific and actionable, no emojis or decorative formatting
+
+        Skip commenting on:
+        - Code style, formatting, or naming conventions
+        - Minor performance optimizations
+        - Architectural decisions or design patterns
+        - Features or functionality (unless broken)
+        - Test coverage (unless tests are clearly broken)
+
+        You may open and read other repository files beyond those listed above when it helps you understand the change, but keep all review comments anchored to the modified lines in this PR.
+
+        Use the fetched PR data to:
+        - Avoid repeating resolved issues unless the problem still exists.
+        - Reference ongoing discussions when adding a follow-up or clarification.
+        - Prefer replying to existing open threads instead of creating duplicates when addressing the same code.
+        - Ignore your own previous comments that have been resolved unless the underlying issue is still present.
+
+        Position calculation:
+        - Use the line position from the diff data fetched from the PR
+        - This is the line number in the diff, not the absolute file line
+        - Comments must align with exact changed lines only
+
+        How to submit your review:
+
+        IMPORTANT REQUIREMENTS:
+        - DO NOT request changes or approve the PR as this blocks the merge workflow
+        - DO NOT use review statuses that affect the PR's mergeable state
+        - PRIORITIZE inline comments on specific lines (suggestions are optional)
+        - USE curl with the GitHub REST API to submit reviews with inline comments
+
+        To submit a review with inline comments:
+        1. Create a JSON payload with your review data (event: "COMMENT", comments array with paths and positions)
+        2. Use curl to POST to: https://api.github.com/repos/${{ github.repository }}/pulls/${{ inputs.pr-number }}/reviews
+        3. Include the GitHub token in the Authorization header: "Bearer $GH_TOKEN"
+        4. When confident about fixes, include markdown ```suggestion blocks (but these are OPTIONAL)
+        5. Use line positions from the PR diff (not absolute file line numbers)
+        6. For multi-line comments: set start_line and line (end line) to define the range
+
+        Example single-line suggestion format in comment body:
+        ```
+        Missing await on async call. This will cause the promise to not resolve properly.
+        \`\`\`suggestion
+        const data = await fetchUserData(userId);
+        \`\`\`
+        ```
+
+        Example multi-line suggestion format (CRITICAL - include ALL replacement lines):
+        ```json
+        {
+          "path": "path/to/file.js",
+          "start_line": 10,        // Line number in the diff where comment starts (for multi-line comments)
+          "line": 13,              // Line number in the diff where comment ends (required for all comments)
+          "start_side": "RIGHT",  // Side of diff where comment starts (LEFT=old code, RIGHT=new code)
+          "side": "RIGHT",         // Side of diff where comment ends (usually same as start_side)
+          "body": "Missing null check will cause runtime error.\n\`\`\`suggestion\nif (value != null) {\n  return processValue(value);\n}\nreturn defaultValue;\n\`\`\`"
+        }
+        ```
+
+        IMPORTANT for multi-line suggestions:
+        - The suggestion block must contain the COMPLETE replacement for lines start_line through line
+        - GitHub will replace ALL lines in that range with your suggestion content
+        - If you only include the last line, GitHub will still replace the entire range, breaking the code
+
+        For simple status updates without inline comments:
+        - You may use 'gh pr comment' to post a general comment
+        - Example: "Code review complete. No issues found." or "Found X issues requiring attention."
+
+        Review guidelines:
+        - Focus on inline comments identifying specific issues
+        - Submit at most 10 inline comments, prioritizing the most critical issues
+        - Include commit suggestions ONLY when you're confident about the exact fix
+        - When uncertain about the fix, describe the problem without a code suggestion
+        - Check for existing comments to avoid duplicates
+        - Group related inline comments in a single review submission when efficient
+        EOF
+
+        echo "Running code review analysis..."
+        droid exec --skip-permissions-unsafe -f prompt.txt
+
+    - name: Upload debug artifacts on failure
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: droid-review-debug-${{ github.run_id }}
+        path: |
+          prompt.txt
+          ${{ runner.home }}/.factory/logs/droid-log-single.log
+          ${{ runner.home }}/.factory/logs/console.log
+        if-no-files-found: ignore
+        retention-days: 7
