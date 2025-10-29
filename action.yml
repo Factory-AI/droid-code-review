@@ -39,64 +39,213 @@ runs:
         set -euo pipefail
 
         echo "Checking PR description for @droid fill command..."
-        
-        # Fetch current PR description
+
+        # Fetch current PR description and save original
         PR_BODY=$(gh pr view ${{ inputs.pr-number }} --repo ${{ github.repository }} --json body -q .body || echo "")
-        
+
         # Check if PR description contains "@droid fill"
         if echo "$PR_BODY" | grep -q "@droid fill"; then
           echo "Found '@droid fill' in PR description. Generating detailed description..."
           
+          # Extract additional instructions if provided after @droid fill
+          ADDITIONAL_INSTRUCTIONS=$(echo "$PR_BODY" | sed -n 's/.*@droid fill\s*\(.*\)/\1/p' | head -1)
+          
+          # Check for PR template
+          PR_TEMPLATE=""
+          if [ -f ".github/pull_request_template.md" ]; then
+            PR_TEMPLATE=$(cat .github/pull_request_template.md)
+            echo "Found PR template"
+          elif [ -f ".github/PULL_REQUEST_TEMPLATE.md" ]; then
+            PR_TEMPLATE=$(cat .github/PULL_REQUEST_TEMPLATE.md)
+            echo "Found PR template"
+          elif [ -f "docs/pull_request_template.md" ]; then
+            PR_TEMPLATE=$(cat docs/pull_request_template.md)
+            echo "Found PR template"
+          elif [ -f "PULL_REQUEST_TEMPLATE.md" ]; then
+            PR_TEMPLATE=$(cat PULL_REQUEST_TEMPLATE.md)
+            echo "Found PR template"
+          else
+            echo "No PR template found"
+          fi
+          
           cat > pr_description_prompt.txt << 'EOF'
-        You need to generate a comprehensive pull request description for PR #${{ inputs.pr-number }}.
+        You are an intelligent AI system helping to generate comprehensive pull request descriptions.
 
+        REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: #${{ inputs.pr-number }}
+
+        YOUR TASK:
+        Generate an excellent pull request description by analyzing the code changes and following a structured approach.
+
+        STEP 1: Data Collection
         First, use the Web Fetch tool to get the full PR context from: https://github.com/${{ github.repository }}/pull/${{ inputs.pr-number }}
 
         This will provide you with:
         - Current PR title and metadata
-        - Complete diff showing all changes
+        - Complete diff showing all changes (lines starting with + or -)
         - List of changed files
-        - The actual code changes
+        - Commit messages
+        - Any linked issues or tickets
 
-        Task: Generate a detailed PR description that replaces the current description entirely.
+        STEP 2: Analysis Phase
+        After fetching the data, analyze the changes:
 
-        The description should include:
+        A. SUMMARY GENERATION
+        - Focus ONLY on actual code changes (+ and - lines)
+        - Group related changes together logically
+        - Estimate complexity:
+          * Low: Simple changes, < 150 lines, single purpose
+          * Medium: Multiple files/functions, 150-500 lines
+          * High: Major refactoring, > 500 lines, architectural changes
+        - Identify the primary purpose and impact
+
+        B. CHANGE CATEGORIZATION
+        - Bug fixes vs features vs refactoring
+        - Breaking changes identification
+        - Dependencies added/updated/removed
+        - Test additions or modifications
+
+        STEP 3: PR Description Generation
+
+        EOF
+
+          # Add PR template section if exists
+          if [ -n "$PR_TEMPLATE" ]; then
+            cat >> pr_description_prompt.txt << 'EOF'
+        PR_TEMPLATE (You MUST follow this structure):
+        ```
+        EOF
+            echo "$PR_TEMPLATE" >> pr_description_prompt.txt
+            cat >> pr_description_prompt.txt << 'EOF'
+        ```
+
+        Generate the description following the EXACT structure of the PR_TEMPLATE above.
+        - Fill in sections you can verify from the code changes
+        - For checklists, ONLY check items you can verify from the diff
+        - For unverifiable sections, add "[PR author to fill]" placeholder
+
+        EOF
+          else
+            cat >> pr_description_prompt.txt << 'EOF'
+        No PR template found. Use this standard structure:
 
         ## Summary
-        A clear, concise overview of what this PR accomplishes (2-3 sentences).
+        [2-3 sentences describing what this PR accomplishes. Focus on the "what" and "why", not implementation details]
 
-        ## Changes
-        - List the main changes made in this PR
-        - Group related changes together
-        - Use bullet points for clarity
-        - Include file paths when referencing specific changes
+        ## What Changed
+        [Bullet points of specific changes, grouped by category]
+        - **Feature/Component**: Description of changes with affected files
+        - **Tests**: Test additions/modifications if present in diff
+        - **Dependencies**: Package updates if applicable
+        - **Configuration**: Config changes if applicable
 
         ## Implementation Details
-        Describe key implementation decisions, algorithms, or patterns used. Focus on the "why" behind the changes, not just the "what".
+        [Key technical decisions and patterns used. Focus on non-obvious choices and the reasoning behind them]
 
         ## Testing
-        - Mention any tests added or modified
-        - Note any manual testing performed
-        - Highlight areas that may need extra testing attention
+        [Only mention tests that are visible in the diff]
+        - Added/modified test files: [list files if present]
+        - Test coverage areas: [based on visible test changes]
+        - Note: PR author should run tests and report results
 
-        ## Breaking Changes (if applicable)
-        List any breaking changes, deprecated features, or migration requirements.
+        ## Breaking Changes
+        [Only include if there are actual breaking changes visible in the code]
 
-        ## Notes
-        Any additional context, TODOs, or considerations for reviewers.
+        ## Related Issues
+        [Link any issues/tickets mentioned in the PR or commits]
+        Fixes #[issue-number] (if applicable)
 
-        Format guidelines:
-        - Use Markdown formatting
-        - Keep sections concise but informative
-        - Use code blocks when showing examples
-        - Avoid redundant information
-        - Focus on what reviewers need to know
-        - DO NOT include "@droid fill" in the new description
+        ## Additional Notes
+        [Any TODOs, follow-up work, or important context for reviewers]
 
-        After generating the description, update the PR using:
-        gh pr edit ${{ inputs.pr-number }} --repo ${{ github.repository }} --body "YOUR_GENERATED_DESCRIPTION"
+        EOF
+          fi
 
-        Make sure to properly escape the description content for shell usage.
+          # Add additional instructions if provided
+          if [ -n "$ADDITIONAL_INSTRUCTIONS" ]; then
+            cat >> pr_description_prompt.txt << EOF
+
+        ADDITIONAL INSTRUCTIONS FROM USER:
+        $ADDITIONAL_INSTRUCTIONS
+
+        EOF
+          fi
+
+          cat >> pr_description_prompt.txt << 'EOF'
+        CRITICAL RULES:
+        1. **NO ASSUMPTIONS**: Do not claim anything you cannot verify from the code diff
+           - ❌ "All tests pass"
+           - ❌ "Performance is improved"
+           - ❌ "Follows best practices"
+           - ✅ "Added error handling to fetchUser function"
+           - ✅ "Refactored database queries to use prepared statements"
+
+        2. **FACTUAL ONLY**: Every statement must be directly supported by the code changes
+           - Reference specific files and functions
+           - Quote actual code changes when relevant
+           - Use line numbers or file paths for clarity
+
+        3. **PRESERVE INFORMATION**:
+           - Keep ALL URLs from the original PR body
+           - Include all issue/ticket references with proper linking syntax
+           - Use GitHub magic words for auto-linking: Fixes, Closes, Resolves
+
+        4. **CLARITY AND CONCISENESS**:
+           - Be entity-dense: each sentence should add new information
+           - Use active voice ("This PR adds..." not "Added by this PR...")
+           - Avoid redundancy between sections
+           - Technical but accessible language
+
+        5. **TICKETS AND ISSUES**:
+           - If the original body mentions tickets (JIRA, Linear, etc.), include them
+           - Format: "Fixes ABC-123" or "Closes #456"
+           - Place these in the Related Issues section or after the summary
+
+        6. **UNVERIFIABLE ITEMS**:
+           - For checklist items you cannot verify: leave unchecked
+           - For required information you don't have: use "[PR author to fill]"
+           - Common unverifiable items: test results, performance metrics, deployment status
+
+        FINAL STEP: Update the PR
+
+        After generating the description, update it using this EXACT format:
+
+        ```bash
+        # Create a temporary file with the new description
+        cat > new_pr_body.md << 'DESCRIPTION_END'
+        [YOUR GENERATED DESCRIPTION HERE]
+        DESCRIPTION_END
+
+        # Update the PR
+        gh pr edit ${{ inputs.pr-number }} --repo ${{ github.repository }} --body-file new_pr_body.md
+        ```
+
+        IMPORTANT: 
+        - The new description should COMPLETELY REPLACE the old one
+        - Do NOT include "@droid fill" in the new description
+        - Ensure proper markdown formatting and escaping
+
+        SOURCE ATTRIBUTION:
+        At the very end of your generated description, add this footer:
+
+        ---
+        <details>
+        <summary>📝 <sub>PR description generated by Factory Droid</sub></summary>
+        <sub>
+
+        - Generated from PR #${{ inputs.pr-number }} diff analysis
+        - Original body: "@droid fill${{ ADDITIONAL_INSTRUCTIONS:+ }}$ADDITIONAL_INSTRUCTIONS"
+        - Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+        </sub>
+        </details>
+
+        Now proceed to:
+        1. Fetch the PR data
+        2. Analyze the changes
+        3. Generate the comprehensive description
+        4. Update the PR with the new description
+
         EOF
 
           echo "Generating PR description..."
