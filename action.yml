@@ -30,6 +30,83 @@ runs:
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         "$HOME/.local/bin/droid" --version
 
+    - name: Check and fill PR description if needed
+      shell: bash
+      env:
+        FACTORY_API_KEY: ${{ inputs.factory-api-key }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+
+        echo "Checking PR description for @droid fill command..."
+        
+        # Fetch current PR description
+        PR_BODY=$(gh pr view ${{ inputs.pr-number }} --repo ${{ github.repository }} --json body -q .body || echo "")
+        
+        # Check if PR description contains "@droid fill"
+        if echo "$PR_BODY" | grep -q "@droid fill"; then
+          echo "Found '@droid fill' in PR description. Generating detailed description..."
+          
+          cat > pr_description_prompt.txt << 'EOF'
+        You need to generate a comprehensive pull request description for PR #${{ inputs.pr-number }}.
+
+        First, use the Web Fetch tool to get the full PR context from: https://github.com/${{ github.repository }}/pull/${{ inputs.pr-number }}
+
+        This will provide you with:
+        - Current PR title and metadata
+        - Complete diff showing all changes
+        - List of changed files
+        - The actual code changes
+
+        Task: Generate a detailed PR description that replaces the current description entirely.
+
+        The description should include:
+
+        ## Summary
+        A clear, concise overview of what this PR accomplishes (2-3 sentences).
+
+        ## Changes
+        - List the main changes made in this PR
+        - Group related changes together
+        - Use bullet points for clarity
+        - Include file paths when referencing specific changes
+
+        ## Implementation Details
+        Describe key implementation decisions, algorithms, or patterns used. Focus on the "why" behind the changes, not just the "what".
+
+        ## Testing
+        - Mention any tests added or modified
+        - Note any manual testing performed
+        - Highlight areas that may need extra testing attention
+
+        ## Breaking Changes (if applicable)
+        List any breaking changes, deprecated features, or migration requirements.
+
+        ## Notes
+        Any additional context, TODOs, or considerations for reviewers.
+
+        Format guidelines:
+        - Use Markdown formatting
+        - Keep sections concise but informative
+        - Use code blocks when showing examples
+        - Avoid redundant information
+        - Focus on what reviewers need to know
+        - DO NOT include "@droid fill" in the new description
+
+        After generating the description, update the PR using:
+        gh pr edit ${{ inputs.pr-number }} --repo ${{ github.repository }} --body "YOUR_GENERATED_DESCRIPTION"
+
+        Make sure to properly escape the description content for shell usage.
+        EOF
+
+          echo "Generating PR description..."
+          droid exec --skip-permissions-unsafe -f pr_description_prompt.txt
+          
+          echo "PR description updated successfully."
+        else
+          echo "No '@droid fill' found in PR description. Skipping description generation."
+        fi
+
     - name: Perform automated code review
       shell: bash
       env:
