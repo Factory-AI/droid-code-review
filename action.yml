@@ -113,10 +113,43 @@ runs:
         - Check existing comments thoroughly to avoid ALL duplicates - if you've commented on an issue before, skip it
         - Only comment on NEW issues that haven't been identified in any previous review run
 
-        Position calculation:
-        - Use the line position from the diff data fetched from the PR
-        - This is the line number in the diff, not the absolute file line
-        - Comments must align with exact changed lines only
+        CRITICAL: Line Position Calculation for Inline Comments
+
+        GitHub API requires EXACT diff positions. Here's how to calculate them correctly:
+
+        1. UNDERSTANDING DIFF POSITIONS:
+           When you fetch the PR diff, positions are counted sequentially:
+           ```diff
+           @@ -10,7 +10,9 @@ function example() {
+             unchanged line     // Position 1 in diff
+             unchanged line     // Position 2 in diff
+           - removed line       // Position 3 in diff
+           + added line         // Position 4 in diff
+           + another added      // Position 5 in diff
+           ```
+
+        2. POSITION MAPPING PROCESS:
+           - Count EVERY line in the diff (including unchanged context lines)
+           - Position starts at 1 for the first line after each @@ header
+           - Use "side": "RIGHT" for commenting on added lines (+)
+           - Use "side": "LEFT" for commenting on removed lines (-)
+
+        3. BEFORE SUBMITTING ANY COMMENTS:
+           Step 1: Parse the fetched diff and create a position map
+           Step 2: For each issue, record the EXACT diff position (not file line)
+           Step 3: Verify position by matching the exact code content
+           Step 4: Only then construct your review payload
+
+        4. VALIDATION CHECKLIST:
+           ✓ Verified position number matches the exact code line
+           ✓ Using "line" field (not deprecated "position" field)
+           ✓ For multi-line: start_line < line, and suggestion covers ALL lines
+           ✓ Content in suggestion matches what needs to be replaced
+
+        COMMON MISTAKES TO AVOID:
+        ❌ Using absolute file line numbers instead of diff positions
+        ❌ Counting only changed lines (must count ALL lines in diff)
+        ❌ Assuming positions without verifying against actual diff content
 
         How to submit your review:
 
@@ -127,12 +160,46 @@ runs:
         - USE curl with the GitHub REST API to submit reviews with inline comments
 
         To submit a review with inline comments:
-        1. Create a JSON payload with your review data (event: "COMMENT", comments array with paths and positions)
-        2. Use curl to POST to: https://api.github.com/repos/${{ github.repository }}/pulls/${{ inputs.pr-number }}/reviews
-        3. Include the GitHub token in the Authorization header: "Bearer $GH_TOKEN"
-        4. When confident about fixes, include markdown ```suggestion blocks (but these are OPTIONAL)
-        5. Use line positions from the PR diff (not absolute file line numbers)
-        6. For multi-line comments: set start_line and line (end line) to define the range
+        
+        1. FIRST, create a position map from the fetched diff:
+           Example: If diff shows a file starting at line 45:
+           ```
+           @@ -45,6 +45,8 @@ async function fetchData() {
+             const url = config.apiUrl;        // Diff position 1
+             const response = fetch(url);      // Diff position 2
+           +  // Missing await here             // Diff position 3
+           +  return response.json();          // Diff position 4
+             console.log('Done');              // Diff position 5
+           ```
+
+        2. Build your review payload with VERIFIED positions:
+           ```bash
+           curl -X POST \
+             -H "Authorization: Bearer $GH_TOKEN" \
+             -H "Accept: application/vnd.github.v3+json" \
+             https://api.github.com/repos/${{ github.repository }}/pulls/${{ inputs.pr-number }}/reviews \
+             -d '{
+               "event": "COMMENT",
+               "comments": [
+                 {
+                   "path": "src/api/fetchData.js",
+                   "line": 4,
+                   "side": "RIGHT",
+                   "body": "Missing await on async call.\n```suggestion\n  return await response.json();\n```"
+                 }
+               ]
+             }'
+           ```
+
+        3. For multi-line comments, specify the range:
+           - start_line: first line of the range (e.g., 3)
+           - line: last line of the range (e.g., 4)
+           - Include ALL lines in that range in your suggestion
+
+        4. VERIFY before submitting:
+           - Match exact code content at calculated position
+           - Ensure suggestion syntax is correct
+           - Check that you're using "line" not "position" field
 
         Example single-line suggestion format in comment body:
         ```
