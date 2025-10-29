@@ -401,8 +401,7 @@ runs:
         echo "Running code review analysis..."
         droid exec --skip-permissions-unsafe -f prompt.txt
 
-    - name: Upload debug artifacts on failure
-      if: ${{ failure() }}
+    - name: Upload debug artifacts
       uses: actions/upload-artifact@v4
       with:
         name: droid-review-debug-${{ github.run_id }}
@@ -410,5 +409,6 @@ runs:
           prompt.txt
           ${{ runner.home }}/.factory/logs/droid-log-single.log
           ${{ runner.home }}/.factory/logs/console.log
+          ${{ runner.home }}/.factory/sessions/*
         if-no-files-found: ignore
         retention-days: 7
