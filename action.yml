@@ -109,10 +109,9 @@ runs:
         You may open and read other repository files beyond those listed above when it helps you understand the change, but keep all review comments anchored to the modified lines in this PR.
 
         Use the fetched PR data to:
-        - Avoid repeating resolved issues unless the problem still exists.
-        - Reference ongoing discussions when adding a follow-up or clarification.
-        - Prefer replying to existing open threads instead of creating duplicates when addressing the same code.
-        - Ignore your own previous comments that have been resolved unless the underlying issue is still present.
+        - NEVER repeat any comments you've made in previous review runs, regardless of resolution status
+        - Check existing comments thoroughly to avoid ALL duplicates - if you've commented on an issue before, skip it
+        - Only comment on NEW issues that haven't been identified in any previous review run
 
         Position calculation:
         - Use the line position from the diff data fetched from the PR
