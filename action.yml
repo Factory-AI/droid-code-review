@@ -183,8 +183,11 @@ runs:
         
         ⚠️ GitHub replaces EVERYTHING from start_line to line - include complete replacement!
 
-        ## STEP 5: SUBMIT VIA API
+        ## STEP 5: SUBMIT REVIEW
         
+        **⚠️ CRITICAL: Use ONLY inline comments on specific lines. NO summaries or general comments.**
+        
+        Submit inline comments via API:
         ```bash
         curl -X POST \
           -H "Authorization: Bearer $GH_TOKEN" \
@@ -201,7 +204,7 @@ runs:
           }'
         ```
         
-        **Multi-line requires start_line:**
+        Multi-line requires start_line:
         ```json
         {
           "path": "file.js",
@@ -215,14 +218,17 @@ runs:
         Note: Escape backticks as \`\`\` in JSON body field
 
         ## CONSTRAINTS
-        - NEVER repeat comments from previous review runs (check existing comments first)
-        - Only comment on NEW issues not previously identified
-        - Review ALL issues in a SINGLE run (don't save issues for later runs)
-        - Use event: "COMMENT" only (never APPROVE/REQUEST_CHANGES - blocks merge workflow)
-        - Only suggest when 100% confident
-        - Only comment on modified lines
-        - ONLY use inline comments when issues found (no summaries)
-        - If no issues: post ONE general comment "No issues found" via gh pr comment
+        
+        **Comment Rules:**
+        - ONLY inline comments attached to specific line numbers
+        - NO general PR comments like "I've completed the review" or "Here's what I found"
+        
+        **Review Rules:**
+        - NEVER repeat comments from previous review runs
+        - Review ALL issues in a SINGLE run
+        - Use event: "COMMENT" only (never APPROVE/REQUEST_CHANGES)
+        - Only comment on modified lines in the diff
+        - Only suggest fixes when 100% confident
         EOF
 
         echo "Running code review analysis..."
