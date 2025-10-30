@@ -43,44 +43,73 @@ runs:
         # Fetch current PR description
         PR_BODY=$(gh pr view ${{ inputs.pr-number }} --repo ${{ github.repository }} --json body -q .body || echo "")
         
-        # Check if PR description contains "@droid fill"
-        if echo "$PR_BODY" | grep -q "@droid fill"; then
-          echo "Found '@droid fill' in PR description. Generating detailed description..."
-          
-          cat > pr_description_prompt.txt << 'EOF'
+        if ! echo "$PR_BODY" | grep -q "@droid fill"; then
+          echo "No '@droid fill' found in PR description. Skipping description generation."
+          exit 0
+        fi
+
+        echo "Found '@droid fill' in PR description. Generating detailed description..."
+        
+        # Check for PR template in common locations
+        PR_TEMPLATE=""
+        for template_path in ".github/PULL_REQUEST_TEMPLATE.md" ".github/pull_request_template.md"; do
+          if [ -f "$template_path" ]; then
+            PR_TEMPLATE=$(cat "$template_path")
+            echo "Found PR template at $template_path"
+            break
+          fi
+        done
+        
+        # Create the entire prompt in a single heredoc with inline variables
+        cat > pr_description_prompt.txt << EOF
         Generate a comprehensive pull request description for PR #${{ inputs.pr-number }}.
 
         First, use the Web Fetch tool to get the full PR context from:
         https://github.com/${{ github.repository }}/pull/${{ inputs.pr-number }}
 
-        Then generate a description with this structure:
+        This will provide you with the PR title, diff, changed files, and commit messages.
 
-        ## Summary
-        A clear 2-3 sentence overview of what this PR accomplishes.
-
-        ## Changes
-        - List the main changes made in this PR
-        - Group related changes together
-        - Reference specific files when relevant
-
-        ## Implementation Details
-        Describe key technical decisions or patterns used (if non-obvious).
-
-        ## Testing
-        - Note any test files added or modified (visible in the diff)
-        - Remind that tests should be run locally
-
-        ## Breaking Changes
-        Only include if there are actual breaking changes.
-
-        ## Related Issues
-        Link any issues mentioned in the PR or commits (e.g., Fixes #123).
+        $(if [ -n "$PR_TEMPLATE" ]; then
+          echo "YOUR TASK: Fill out the following PR template based on the code changes."
+          echo ""
+          echo "--- PR TEMPLATE TO FILL ---"
+          echo "$PR_TEMPLATE"
+          echo "--- END OF TEMPLATE ---"
+          echo ""
+          echo "TEMPLATE INSTRUCTIONS:"
+          echo "- Fill sections you can verify from the code diff"
+          echo "- For checklists: only check items verifiable from the code"
+          echo "- For unverifiable sections: use '[To be filled by author]'"
+        else
+          echo "Generate a description with this structure:"
+          echo ""
+          echo "## Summary"
+          echo "A clear 2-3 sentence overview of what this PR accomplishes."
+          echo ""
+          echo "## Changes"
+          echo "- List the main changes made in this PR"
+          echo "- Group related changes together"
+          echo "- Reference specific files when relevant"
+          echo ""
+          echo "## Implementation Details"
+          echo "Describe key technical decisions or patterns used (if non-obvious)."
+          echo ""
+          echo "## Testing"
+          echo "- Note any test files added or modified (visible in the diff)"
+          echo "- Remind that tests should be run locally"
+          echo ""
+          echo "## Breaking Changes"
+          echo "Only include if there are actual breaking changes."
+          echo ""
+          echo "## Related Issues"
+          echo "Link any issues mentioned in the PR or commits (e.g., Fixes #123)."
+        fi)
 
         IMPORTANT RULES:
-        1. Only describe what you can verify from the actual code diff
-        2. Don't make assumptions about performance, test results, or deployment
-        3. Be concise and factual
-        4. DO NOT include "@droid fill" in the new description
+        1. Fill out the sections based *only* on the actual code diff.
+        2. Do not make up information. If a section isn't relevant, state that.
+        3. Be concise and factual.
+        4. DO NOT include "@droid fill" in the final generated description.
 
         After generating the description, update the PR using:
         gh pr edit ${{ inputs.pr-number }} --repo ${{ github.repository }} --body "[YOUR GENERATED DESCRIPTION]"
@@ -88,16 +117,10 @@ runs:
         Make sure to properly escape the description for shell usage.
         EOF
 
-
-
-          echo "Generating PR description..."
-          droid exec --skip-permissions-unsafe -f pr_description_prompt.txt
-          
-          echo "PR description updated successfully."
-        else
-          echo "No '@droid fill' found in PR description. Skipping description generation."
-        fi
-
+        echo "Generating PR description..."
+        droid exec --skip-permissions-unsafe -f pr_description_prompt.txt
+        
+        echo "PR description updated successfully."
     - name: Perform automated code review
       shell: bash
       env:
