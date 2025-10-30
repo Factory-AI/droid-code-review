@@ -136,7 +136,9 @@ runs:
         ## STEP 1: FETCH PR DATA
         Use Web Fetch: https://github.com/${{ github.repository }}/pull/${{ inputs.pr-number }}
 
-        ## STEP 2: IDENTIFY BUGS ONLY
+        ## STEP 2: IDENTIFY ALL BUGS IN ONE PASS
+
+        Scan the ENTIRE diff and identify ALL issues now - don't save any for future runs.
         
         **Focus on:**
         - Logic errors: unreachable code, missing break/return, off-by-one errors
@@ -213,13 +215,14 @@ runs:
         Note: Escape backticks as \`\`\` in JSON body field
 
         ## CONSTRAINTS
-        - Never repeat previous comments
-        - Max 5 comments per review
-        - Use event: "COMMENT" only
+        - NEVER repeat comments from previous review runs (check existing comments first)
+        - Only comment on NEW issues not previously identified
+        - Review ALL issues in a SINGLE run (don't save issues for later runs)
+        - Use event: "COMMENT" only (never APPROVE/REQUEST_CHANGES - blocks merge workflow)
         - Only suggest when 100% confident
         - Only comment on modified lines
-
-        If no issues: gh pr comment ${{ inputs.pr-number }} --body "No issues found."
+        - ONLY use inline comments when issues found (no summaries)
+        - If no issues: post ONE general comment "No issues found" via gh pr comment
         EOF
 
         echo "Running code review analysis..."
