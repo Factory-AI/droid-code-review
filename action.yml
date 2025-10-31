@@ -162,30 +162,16 @@ runs:
         **Before submitting:** Verify the text at your calculated position matches the line to replace
 
         ## STEP 4: FORMAT COMMENTS
-        
-        Structure: Issue → Impact → Suggestion (if confident)
+
+        Structure: Issue → Impact → (optional) Context.
+        Do NOT include commit suggestions or use fenced suggestion blocks.
         No emojis or decorative formatting - be direct and professional.
         
         Example: "Missing await on async call. This returns a Promise instead of the data, causing undefined behavior downstream."
-        
-        **Single-line suggestion:**
-        ```suggestion
-        const result = await fetchData();
-        ```
-        
-        **Multi-line suggestion (must include ALL lines being replaced):**
-        ```suggestion
-        if (value != null) {
-          return processValue(value);
-        }
-        return defaultValue;
-        ```
-        
-        ⚠️ GitHub replaces EVERYTHING from start_line to line - include complete replacement!
 
         ## STEP 5: SUBMIT REVIEW
         
-        **⚠️ CRITICAL: Use ONLY inline comments on specific lines. NO summaries or general comments.**
+        **⚠️ CRITICAL: Use ONLY inline comments on specific lines. NO summaries, general comments, or commit suggestions.**
         
         Submit inline comments via API:
         ```bash
@@ -199,11 +185,11 @@ runs:
               "path": "file.js",
               "line": 2,              // Diff position (NOT file line number)
               "side": "RIGHT",        // RIGHT for new code, LEFT for old
-              "body": "Issue description.\n\`\`\`suggestion\nfixed code\n\`\`\`"
+              "body": "Describe the issue and its impact. Provide guidance in prose only."
             }]
           }'
         ```
-        
+
         Multi-line requires start_line:
         ```json
         {
@@ -212,23 +198,24 @@ runs:
           "line": 13,            // Last line to replace
           "start_side": "RIGHT",
           "side": "RIGHT",
-          "body": "Issue.\n\`\`\`suggestion\ncomplete\nreplacement\nfor all\nlines\n\`\`\`"
+          "body": "Issue spans multiple lines. Explain the problem and recommend changes without suggestion blocks."
         }
         ```
-        Note: Escape backticks as \`\`\` in JSON body field
+        Note: Keep feedback in plain text; do not embed suggestion blocks or code fences.
 
         ## CONSTRAINTS
         
         **Comment Rules:**
         - ONLY inline comments attached to specific line numbers
         - NO general PR comments like "I've completed the review" or "Here's what I found"
+        - NO commit suggestions or fenced suggestion blocks
         
         **Review Rules:**
         - NEVER repeat comments from previous review runs
         - Review ALL issues in a SINGLE run
         - Use event: "COMMENT" only (never APPROVE/REQUEST_CHANGES)
         - Only comment on modified lines in the diff
-        - Only suggest fixes when 100% confident
+        - Only suggest fixes when 100% confident, expressed in prose rather than suggestion blocks
         EOF
 
         echo "Running code review analysis..."
