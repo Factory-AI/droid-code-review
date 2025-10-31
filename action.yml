@@ -240,8 +240,8 @@ runs:
         name: droid-review-debug-${{ github.run_id }}
         path: |
           prompt.txt
-          ${{ runner.home }}/.factory/logs/droid-log-single.log
-          ${{ runner.home }}/.factory/logs/console.log
-          ${{ runner.home }}/.factory/sessions/*
+          ~/.factory/logs/droid-log-single.log
+          ~/.factory/logs/console.log
+          ~/.factory/sessions/*
         if-no-files-found: ignore
         retention-days: 7
