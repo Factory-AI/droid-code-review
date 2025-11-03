@@ -148,27 +148,14 @@ runs:
         
         **Skip:** style, naming, architecture, performance, test coverage
 
-        ## STEP 3: POSITION CALCULATION
+        ## STEP 3: LINE SELECTION
 
-        **Critical:** Compute GitHub diff positions across the ENTIRE file patch.
-        - Start at 1 for the first line after the very first @@ header in the file.
-        - Keep incrementing for every subsequent line, even when a new @@ hunk begins (do **not** reset per hunk).
-        - Count both unchanged context lines and added/removed lines.
-        Example with multiple hunks:
-        ```diff
-        @@ -10,4 +10,5 @@
-          const data = getData();        // Position 1
-          const result = process(data);  // Position 2
-        + console.log(result);           // Position 3
-          return result;                 // Position 4
+        **Critical:** Use GitHub's diff line numbers instead of manual position math.
+        - For added/changed code, take the number shown on the RIGHT side of the diff (`side: "RIGHT"`).
+        - For removed code, use the LEFT column (`side: "LEFT"`).
+        - Never include a `position` field when using line-based payloads.
 
-        @@ -40,4 +41,5 @@
-          const value = fetch();         // Position 5 ← continues numbering
-        + console.log(value);            // Position 6
-          return value;                  // Position 7
-        ```
-
-        For multi-line feedback you must also capture the 1-based line numbers in the PR's HEAD version for the first and last lines in the span. These become `start_line` and `line` (with matching `start_side`/`side`, usually `"RIGHT"` for new code).
+        For multi-line feedback you must capture the first and last HEAD line numbers in the span. These become `start_line` and `line` with matching sides (usually `"RIGHT"` for new code).
         
         **Before submitting:** Verify the text at your calculated position matches the line to replace
 
@@ -194,7 +181,8 @@ runs:
             "event": "COMMENT",
             "comments": [{
               "path": "file.js",
-              "position": 6,           // 1-based cumulative diff position for this file
+              "line": 42,              // HEAD line number from the RIGHT column of the diff
+              "side": "RIGHT",
               "body": "Describe the issue and its impact. Provide guidance in prose only."
             }]
           }'
@@ -211,7 +199,7 @@ runs:
           "body": "Issue spans multiple lines. Explain the problem and recommend changes without suggestion blocks."
         }
         ```
-        (Do not mix `position` with `start_line`/`line`. Use sides of `"LEFT"` when commenting on removed lines.)
+        (Do not mix `position` with line-based fields. Use `"LEFT"` sides when commenting on removed lines.)
         Note: Keep feedback in plain text; do not embed suggestion blocks or code fences.
 
         ## CONSTRAINTS
