@@ -19,13 +19,13 @@ Add this to your repository's `.github/workflows/review-droid.yml`:
 name: Droid Review
 
 permissions:
-  pull-requests: write  # Needed for leaving PR comments
+  pull-requests: write # Needed for leaving PR comments
   contents: read
   issues: write
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 # Cancel previous runs for the same PR
 concurrency:
