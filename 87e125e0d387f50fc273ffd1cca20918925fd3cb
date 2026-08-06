@@ -1,0 +1,23 @@
+README.md
+  054c3d274b64b04f 1,3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.2",
+  "base_commit_sha": "87e125e0d387f50fc273ffd1cca20918925fd3cb",
+  "prompts": {
+    "054c3d274b64b04f": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "e546bf60-be52-4ab2-bfd1-6c8e82b48e3f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "factory-davidgu",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 137,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
